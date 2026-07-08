@@ -1,12 +1,10 @@
 """
-capture.py — steps 1-3 of the clone capture pipeline.
+capture.py
 
 For each route on the target site, this:
-  1. Records every XHR/fetch request+response as a JSON fixture
-     (so step 4 can replay them without hitting the live backend).
-  2. Tags interactive elements in the live DOM with a stable `data-agent-id`
-     (so the orchestrator has durable handles to target later).
-  3. Saves the resulting tagged, rendered HTML.
+    1. Records every XHR/fetch request+response as a JSON fixture
+    2. Tags interactive elements in the live DOM with a stable `data-agent-id`
+    3. Saves the resulting tagged, rendered HTML.
 
 Run:
     pip install playwright --break-system-packages
@@ -18,12 +16,12 @@ import json
 from pathlib import Path
 from playwright.sync_api import sync_playwright, Page, Response
 
-# ---- config: point this at your test site ----
+# my test site path
 BASE_URL = "http://localhost:3000"
 ROUTES = ["/", "/pricing", "/about"]
 OUTPUT_DIR = Path("clone_output")
 
-# Elements we consider "interactive" and worth tagging for the agent.
+# interactive elements.
 INTERACTIVE_SELECTOR = "a, button, input, select, textarea, [role='button'], [onclick]"
 
 # Runs inside the page, before we grab page.content(), so the
