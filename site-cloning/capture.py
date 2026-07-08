@@ -5,11 +5,6 @@ For each route on the target site, this:
     1. Records every XHR/fetch request+response as a JSON fixture
     2. Tags interactive elements in the live DOM with a stable `data-agent-id`
     3. Saves the resulting tagged, rendered HTML.
-
-Run:
-    pip install playwright --break-system-packages
-    playwright install chromium
-    python capture.py
 """
 
 import json
@@ -18,7 +13,7 @@ from playwright.sync_api import sync_playwright, Page, Response
 
 # my test site path
 BASE_URL = "http://localhost:3000"
-ROUTES = ["/", "/pricing", "/about"]
+ROUTES = ["/", "/collections", "/about", "/contact", "/custom-orders", "/product/:id"]
 OUTPUT_DIR = Path("clone_output")
 
 # interactive elements.
