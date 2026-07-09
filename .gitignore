@@ -1,6 +1,8 @@
 venv/
 demo-site/
-
+.env
+__pycache__
+walkthrough.md
 # Logs
 logs
 *.log

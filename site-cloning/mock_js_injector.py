@@ -45,6 +45,12 @@ MOCK_SCRIPT_TEMPLATE = """
     const method = (init && init.method) || (typeof input !== 'string' && input.method) || 'GET';
     const fixture = lookup(url, method);
     if (!fixture) {
+      try {
+        const reqUrl = new URL(url, location.href);
+        if (reqUrl.origin !== location.origin) {
+          return originalFetch(input, init);
+        }
+      } catch(e) {}
       return Promise.resolve(new Response('{}', { status: 404, statusText: 'No fixture recorded' }));
     }
     return Promise.resolve(

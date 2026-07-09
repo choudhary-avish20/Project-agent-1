@@ -14,7 +14,7 @@ from playwright.sync_api import sync_playwright, Page, Response
 # my test site path
 BASE_URL = "http://localhost:3000"
 ROUTES = ["/", "/collections", "/about", "/contact", "/custom-orders", "/product/:id"]
-OUTPUT_DIR = Path("clone_output")
+OUTPUT_DIR = Path("site-cloning/clone_output")
 
 # interactive elements.
 INTERACTIVE_SELECTOR = "a, button, input, select, textarea, [role='button'], [onclick]"
