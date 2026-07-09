@@ -9,7 +9,6 @@
   const TOKEN_SERVER_URL = window.TOKEN_SERVER_URL || "http://localhost:8081";
   const DATA_TOPIC = "agent-channel";
 
-  // ---- stable identity across page reloads (Option A: reconnect per page) ----
   function getOrCreate(key, factory) {
     let value = sessionStorage.getItem(key);
     if (!value) {
@@ -21,13 +20,11 @@
   const roomName = getOrCreate("demo_room_name", () => "demo-" + Math.random().toString(36).slice(2, 10));
   const identity = getOrCreate("demo_identity", () => "visitor-" + Math.random().toString(36).slice(2, 8));
 
-  // ---- current page's filename, matching the slugs stitcher.py rewrote hrefs to ----
   function currentPageFilename() {
     const path = window.location.pathname;
     return path.substring(path.lastIndexOf("/") + 1) || "index.html";
   }
 
-  // ---- gather everything the orchestrator is allowed to act on ----
   function collectElements() {
     return Array.from(document.querySelectorAll("[data-agent-id]"))
       .filter((el) => el.offsetParent !== null) // roughly: currently visible
@@ -38,8 +35,9 @@
       }));
   }
 
-  // ---- a visible fake cursor so actions read as "the agent is doing this", not a teleport ----
   let cursorEl = null;
+
+//fake cursor!
   function getCursor() {
     if (cursorEl) return cursorEl;
     cursorEl = document.createElement("div");
@@ -73,7 +71,7 @@
     return document.querySelector(`[data-agent-id="${CSS.escape(agentId)}"]`);
   }
 
-  // ---- executing commands from the orchestrator ----
+  //tools for the llm
   async function executeCommand(cmd) {
     try {
       switch (cmd.action) {
@@ -100,8 +98,6 @@
         }
 
         case "navigate":
-          // A real navigation, matching Option A: the session will
-          // reconnect on the new page rather than staying alive through it.
           window.location.href = cmd.page;
           return { ok: true, navigating: true };
 
@@ -113,10 +109,8 @@
     }
   }
 
-  // ---- connect and wire everything up ----
   async function init() {
     console.log("[agent-runtime] init() started");
-    // CHECK-ME: confirm this matches LiveKit's current JS quickstart CDN + global name.
     if (!window.LivekitClient) {
       console.error("[agent-runtime] LivekitClient SDK not loaded -- check the CDN <script> tag.");
       return;
@@ -135,6 +129,13 @@
 
     const room = new Room();
 
+    if (window.AgentChatUI) {
+      window.AgentChatUI.init(room);
+      console.log("[agent-runtime] ✅ chat UI initialized");
+    } else {
+      console.warn("[agent-runtime] chat-ui.js not loaded -- skipping sidebar UI");
+    }
+
     room.on(RoomEvent.TrackSubscribed, (track) => {
       console.log("[agent-runtime] 🔊 Track subscribed:", track.kind, track.sid);
       if (track.kind === "audio") {
@@ -145,8 +146,6 @@
       }
     });
 
-    // CHECK-ME: verify the callback argument order/shape against the
-    // current SDK -- this assumes (payload: Uint8Array, participant, kind, topic).
     room.on(RoomEvent.DataReceived, async (payload, participant, _kind, topic) => {
       if (topic !== DATA_TOPIC) return;
       let msg;
@@ -161,7 +160,6 @@
       const result = await executeCommand(msg);
       const reply = JSON.stringify({ type: "command_result", id: msg.id, result });
       console.log("[agent-runtime] 📤 Sending command result reply:", reply);
-      // CHECK-ME: confirm publishData's options shape (reliable/topic) against current docs.
       room.localParticipant.publishData(new TextEncoder().encode(reply), { reliable: true, topic: DATA_TOPIC });
     });
 
@@ -176,11 +174,11 @@
       console.warn("[agent-runtime] ⚠️ microphone not available:", micErr.message);
     }
 
-    // announce the page we landed on so the orchestrator can react without being asked
     const pageState = JSON.stringify({ type: "page_state", page: currentPageFilename(), elements: collectElements() });
     room.localParticipant.publishData(new TextEncoder().encode(pageState), { reliable: true, topic: DATA_TOPIC });
     console.log("[agent-runtime] ✅ page_state announced:", currentPageFilename(), "with", collectElements().length, "elements");
   }
+
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);
