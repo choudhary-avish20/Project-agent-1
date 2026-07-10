@@ -82,7 +82,23 @@
           const el = resolveElement(cmd.agent_id);
           if (!el) return { ok: false, error: `no element with data-agent-id="${cmd.agent_id}"` };
           await moveCursorTo(el);
+
+          // Check if the element (or its closest ancestor) is a link that navigates
+          const anchor = el.closest("a[href]");
+          let willNavigate = false;
+          if (anchor) {
+            const href = anchor.getAttribute("href");
+            const target = anchor.getAttribute("target");
+            if (href && !href.startsWith("#") && !href.startsWith("javascript:") && target !== "_blank") {
+              willNavigate = true;
+            }
+          }
+
           el.click();
+
+          if (willNavigate) {
+            return { ok: true, navigating: true };
+          }
           return { ok: true, page: currentPageFilename(), elements: collectElements() };
         }
 

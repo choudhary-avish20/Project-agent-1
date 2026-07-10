@@ -3,6 +3,8 @@ demo-site/
 .env
 __pycache__
 walkthrough.md
+orc2.py
+chat.js
 # Logs
 logs
 *.log
