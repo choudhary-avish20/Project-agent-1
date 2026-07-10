@@ -1,8 +1,13 @@
 /*
- * chat-ui.js -- builds the meeting room hud
+ * demo-chat.js -- builds the meeting-room sidebar (transcript feed + typed
+ * chat input) and wires it to LiveKit's built-in text stream topics.
+ *
+ * Modified for testing/isolated usage in chat-ui-testing folder.
+ * If initialized without a LiveKit room object, it runs in standalone mode
+ * and mock-responds to visitor messages to facilitate styling testing.
  */
 window.AgentChatUI = (function () {
-  const STORAGE_KEY = "demo_transcript";
+  const STORAGE_KEY = "demo_transcript"; // sessionStorage: survives Option A's per-page reconnects
   const STYLE_ID = "agent-chat-injected-styles";
   let listEl = null;
 
@@ -150,164 +155,59 @@ window.AgentChatUI = (function () {
     inputRow.appendChild(input);
     inputRow.appendChild(sendBtn);
 
-    const controlsRow = document.createElement("div");
-    controlsRow.style.cssText =
-      "flex-shrink:0;display:flex;justify-content:flex-end;gap:8px;padding:10px 14px 0;pointer-events:auto";
-
-    const muteBtn = document.createElement("button");
-    muteBtn.type = "button";
-    muteBtn.title = "Mute microphone";
-    muteBtn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M19 11a7 7 0 0 1-14 0M12 18v3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>`;
-    muteBtn.style.cssText =
-      "width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,0.22);border-radius:50%;background:rgba(18,18,22,0.9);color:#ffffff;cursor:pointer;flex-shrink:0;padding:0;transition:background .15s";
-
-    const endBtn = document.createElement("button");
-    endBtn.type = "button";
-    endBtn.title = "End call";
-    endBtn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
-    </svg>`;
-    endBtn.style.cssText =
-      "width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:none;border-radius:50%;background:#e05a4e;color:#ffffff;cursor:pointer;flex-shrink:0;padding:0;";
-
-    controlsRow.appendChild(muteBtn);
-    controlsRow.appendChild(endBtn);
-
-    panel.appendChild(controlsRow);
     panel.appendChild(listEl);
     panel.appendChild(inputRow);
     document.body.appendChild(panel);
 
-    return { input, sendBtn, muteBtn, endBtn };
+    return { input, sendBtn };
   }
 
   function restoreTranscript() {
     loadTranscript().forEach((m) => renderMessage(m.speaker, m.text));
   }
 
-  let _input = null;
-  let _sendBtn = null;
-  let _muteBtn = null;
-  let _endBtn = null;
-  let _room = null;
-  let _muted = false;
-  let _liveKitWired = false;
-
-  function sendTyped() {
-    if (!_input) return;
-    const value = _input.value.trim();
-    if (!value) return;
-
-    appendMessage("visitor", value);
-    _input.value = "";
-
-    if (_room) {
-      _room.localParticipant.sendText(value, { topic: "lk.chat" });
-    } else {
-      setTimeout(() => {
-        appendMessage(
-          "agent",
-          'Mock response: Received "' + value + '". (No live room connected)',
-        );
-      }, 1000);
-    }
-  }
-
   function init(room) {
-    const { input, sendBtn, muteBtn, endBtn } = buildSidebar();
-    _input = input;
-    _sendBtn = sendBtn;
-    _muteBtn = muteBtn;
-    _endBtn = endBtn;
+    const { input, sendBtn } = buildSidebar();
     restoreTranscript();
-    wireControlButtons();
-
-    sendBtn.addEventListener("click", sendTyped);
-    input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") sendTyped();
-    });
 
     if (!room) {
-      console.log("[chat-ui] Running in isolated mode (no LiveKit room).");
+      console.log("[demo-chat] Running in isolated mode (no LiveKit room).");
+
+      function sendTypedMock() {
+        const value = input.value.trim();
+        if (!value) return;
+        appendMessage("visitor", value);
+        input.value = "";
+
+        // Simulate a mock agent response after 1 second
+        setTimeout(() => {
+          appendMessage(
+            "agent",
+            'Mock response: Received "' + value + '". This is a test response.',
+          );
+        }, 1000);
+      }
+
+      sendBtn.addEventListener("click", sendTypedMock);
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") sendTypedMock();
+      });
+
       console.log(
-        "[chat-ui] Isolated sidebar ready, restored",
+        "[demo-chat] Isolated sidebar ready, restored",
         loadTranscript().length,
         "message(s)",
       );
       return;
     }
 
-    wireRoom(room);
-  }
-
-  function wireControlButtons() {
-    if (!_muteBtn || !_endBtn) return;
-
-    _muteBtn.addEventListener("click", async () => {
-      if (!_room) {
-        console.warn("[chat-ui] mute clicked but no live room connected yet");
-        return;
-      }
-      const nextMuted = !_muted;
-      try {
-        await _room.localParticipant.setMicrophoneEnabled(!nextMuted);
-        _muted = nextMuted;
-        _muteBtn.style.background = _muted ? "#e05a4e" : "rgba(18,18,22,0.9)";
-        _muteBtn.title = _muted ? "Unmute microphone" : "Mute microphone";
-      } catch (e) {
-        console.warn("[chat-ui] failed to toggle microphone:", e);
-      }
-    });
-
-    _endBtn.addEventListener("click", async () => {
-      if (!_room) {
-        console.warn(
-          "[chat-ui] end call clicked but no live room connected yet",
-        );
-        return;
-      }
-      _endBtn.disabled = true;
-      if (_input) _input.disabled = true;
-      if (_sendBtn) _sendBtn.disabled = true;
-      appendMessage("agent", "-- call ended --");
-      try {
-        await _room.localParticipant.publishData(
-          new TextEncoder().encode(JSON.stringify({ type: "end_call" })),
-          { reliable: true, topic: "agent-channel" }
-        );
-      } catch (e) {
-        console.warn("[chat-ui] failed to send end_call signal:", e);
-      }
-      sessionStorage.removeItem(STORAGE_KEY);
-      sessionStorage.removeItem("demo_room_name");
-      sessionStorage.removeItem("demo_identity");
-
-      try {
-        await _room.disconnect();
-      } catch (e) {
-        console.warn("[chat-ui] error disconnecting:", e);
-      }
-    });
-  }
-
-  function wireRoom(room) {
-    if (_liveKitWired) return;
-    _liveKitWired = true;
-    _room = room;
-
-    if (!_input || !_sendBtn) {
-      console.warn(
-        "[chat-ui] wireRoom called before sidebar was built -- call init() first.",
-      );
-      return;
-    }
-
+    // CHECK-ME: confirm registerTextStreamHandler's callback signature
+    // (reader, participantInfo) against the current JS SDK docs.
     room.registerTextStreamHandler(
       "lk.transcription",
       async (reader, participantInfo) => {
+        // CHECK-ME: confirm reader.readAll() is the current convenience method
+        // for a completed text stream (vs manually iterating chunks).
         const text = await reader.readAll();
         if (!text) return;
         const isAgent =
@@ -316,17 +216,35 @@ window.AgentChatUI = (function () {
       },
     );
 
+    function sendTyped() {
+      const value = input.value.trim();
+      if (!value) return;
+      // CHECK-ME: confirm sendText's name/signature against current docs.
+      room.localParticipant.sendText(value, { topic: "lk.chat" });
+      // typed input isn't re-echoed back on lk.transcription (no STT involved),
+      // so echo it locally right away rather than waiting for a round trip.
+      appendMessage("visitor", value);
+      input.value = "";
+    }
+
+    sendBtn.addEventListener("click", sendTyped);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") sendTyped();
+    });
+
     console.log(
-      "[chat-ui] LiveKit sidebar wired, restored",
+      "[demo-chat] LiveKit sidebar ready, restored",
       loadTranscript().length,
       "message(s)",
     );
   }
 
+  // Helper for external testing / simulation
   function simulateAgentMessage(text) {
     appendMessage("agent", text);
   }
 
+  // Clear storage utility
   function clearTranscript() {
     sessionStorage.removeItem(STORAGE_KEY);
     if (listEl) {
@@ -334,5 +252,5 @@ window.AgentChatUI = (function () {
     }
   }
 
-  return { init, wireRoom, simulateAgentMessage, clearTranscript };
+  return { init, simulateAgentMessage, clearTranscript };
 })();

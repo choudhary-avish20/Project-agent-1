@@ -1,8 +1,5 @@
 """
-orchestrator.py — the LLM brain of the demo joins the LiveKit room as an
-agent participant, handles voice via AgentSession (LiveKit Inference for
-STT/LLM/TTS), and drives the clone's agent-runtime.js over the room's data
-channel by exposing click/type/navigate/get_page_elements as LLM tools.
+orchestrator.py — the LLM brain of the demo joins the LiveKit room 
 """
 
 import asyncio
@@ -75,8 +72,6 @@ class DemoGuideAgent(Agent):
 
     @function_tool
     async def click(self, context: RunContext, agent_id: str) -> dict:
-        # A click can land on a real <a href> and cause a full page
-        # navigation just like navigate() does -- record it the same way.
         self._state["last_agent_action_at"] = time.monotonic()
         return await self._send_command("click", {"agent_id": agent_id})
 
@@ -86,10 +81,6 @@ class DemoGuideAgent(Agent):
 
     @function_tool
     async def navigate(self, context: RunContext, page: str) -> dict:
-        # Record when we last acted, so the page_state handler can tell
-        # this navigation was caused by us, not the visitor -- the LLM's
-        # own turn (the one making this tool call) will already narrate
-        # the result, so the independent auto-narration should stay quiet.
         self._state["last_agent_action_at"] = time.monotonic()
         print(f"[orchestrator] navigate() called, timestamp recorded -- pid={os.getpid()}")
         return await self._send_command("navigate", {"page": page})
@@ -113,7 +104,6 @@ class DemoGuideAgent(Agent):
                 nav_future = loop.create_future()
                 PENDING_NAVIGATIONS[self._room.name] = nav_future
                 try:
-                    # Give it a bit more timeout for the page to actually load
                     page_state_res = await asyncio.wait_for(nav_future, timeout=8.0)
                     return page_state_res
                 except asyncio.TimeoutError:
@@ -148,6 +138,32 @@ async def entrypoint(ctx: JobContext):
     session.on("conversation_item_added", lambda ev: save_history(room.name, session.history))
 
     session_started = False
+    call_ending = False
+
+    async def _end_call():
+        nonlocal call_ending
+        if call_ending:
+            return
+        call_ending = True
+        print(f"[orchestrator] end_call received -- pid={os.getpid()} room={room.name}, shutting down")
+
+        try:
+            await session.aclose()
+        except Exception as e:
+            print(f"[orchestrator] warning during session close: {e}")
+
+        ROOM_STATE.pop(room.name, None)
+        try:
+            _state_file(room.name).unlink(missing_ok=True)
+        except Exception as e:
+            print(f"[orchestrator] warning: could not remove persisted history: {e}")
+
+        try:
+            await ctx.delete_room()
+        except Exception as e:
+            print(f"[orchestrator] warning: could not delete room: {e}")
+
+        ctx.shutdown(reason="call ended by visitor")
 
     def on_data_received(packet: rtc.DataPacket):
         if packet.topic != DATA_TOPIC:
@@ -161,6 +177,8 @@ async def entrypoint(ctx: JobContext):
             future = PENDING_COMMANDS.get(msg.get("id"))
             if future and not future.done():
                 future.set_result(msg.get("result", {}))
+        elif msg.get("type") == "end_call":
+            asyncio.create_task(_end_call())
         elif msg.get("type") == "page_state":
             room_state["current_page"] = msg.get("page")
             room_state["elements"] = msg.get("elements", [])
@@ -182,16 +200,8 @@ async def entrypoint(ctx: JobContext):
                 f"page={room_state['current_page']} "
                 f"seconds_since_last_agent_action={seconds_since_action}"
             )
-            # Only react to page changes once the session is fully running;
-            # early page_state messages arrive before session.start() finishes.
             if not session_started:
                 return
-            # If the agent acted (click OR navigate) very recently, treat
-            # this page change as caused by that action -- the LLM's own
-            # tool-call turn is already narrating it, so firing the
-            # auto-reply too is exactly what produced the duplicate/
-            # overlapping responses. Only auto-narrate when the visitor
-            # navigated on their own, with no recent agent action.
             caused_by_agent = (
                 seconds_since_action is not None and seconds_since_action < AGENT_ACTION_WINDOW_S
             )
@@ -199,8 +209,6 @@ async def entrypoint(ctx: JobContext):
                 print("[orchestrator] suppressing auto-narration (agent-initiated nav)")
                 return
             print("[orchestrator] firing auto-narration (visitor-initiated nav)")
-            # The visitor clicked around on their own -- let the agent
-            # notice and react instead of staying silent about it.
             async def _react_to_page_change(page_name: str):
                 try:
                     await session.generate_reply(
