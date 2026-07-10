@@ -7,29 +7,54 @@ channel by exposing click/type/navigate/get_page_elements as LLM tools.
 
 import asyncio
 import json
+import os
+import time
 import uuid
+from pathlib import Path
 from dotenv import load_dotenv
 from livekit import agents, rtc
-from livekit.agents import Agent, AgentSession, JobContext, RunContext, function_tool
+from livekit.agents import Agent, AgentSession, ChatContext, JobContext, RunContext, function_tool
+from livekit.agents.voice.room_io import RoomOptions
 
 load_dotenv()
 
 DATA_TOPIC = "agent-channel"
 COMMAND_TIMEOUT_S = 6.0
+AGENT_ACTION_WINDOW_S = 2.5
 
-# Keyed by room name so a brief reconnect (stitcher.py's hard page
-# navigation disconnects the WebRTC session) doesn't lose conversation
-# context. This only survives as long as the room itself stays alive across
-# the gap -- LiveKit's empty-room grace period comfortably covers a normal
-# page load. If reloads ever take longer than that, this in-memory dict
-# won't survive it and would need to move to real storage (a small file or
-# Redis) instead.
+STATE_DIR = Path("room_state")
+
+
+def _state_file(room_name: str) -> Path:
+    STATE_DIR.mkdir(exist_ok=True)
+    return STATE_DIR / f"{room_name}.json"
+
+
+def load_history(room_name: str) -> ChatContext | None:
+    path = _state_file(room_name)
+    if not path.exists():
+        return None
+    try:
+        return ChatContext.from_dict(json.loads(path.read_text(encoding="utf-8")))
+    except Exception as e:
+        print(f"[orchestrator] warning: could not load saved history for {room_name}: {e}")
+        return None
+
+
+def save_history(room_name: str, chat_ctx: ChatContext) -> None:
+    try:
+        _state_file(room_name).write_text(json.dumps(chat_ctx.to_dict()), encoding="utf-8")
+    except Exception as e:
+        print(f"[orchestrator] warning: could not save history for {room_name}: {e}")
+
 ROOM_STATE: dict[str, dict] = {}
 PENDING_COMMANDS: dict[str, "asyncio.Future"] = {}
+PENDING_NAVIGATIONS: dict[str, asyncio.Future] = {}
 
 
 class DemoGuideAgent(Agent):
-    def __init__(self, room: rtc.Room, room_state: dict):
+    def __init__(self, room: rtc.Room, room_state: dict, chat_ctx: ChatContext | None = None):
+        extra = {"chat_ctx": chat_ctx} if chat_ctx is not None else {}
         super().__init__(
             instructions=(
                 "You are a friendly, upbeat product guide giving a live spoken demo "
@@ -38,7 +63,8 @@ class DemoGuideAgent(Agent):
                 "current page -- never guess a data-agent-id. Narrate what you're "
                 "about to do in a short sentence *before* calling a tool, so the "
                 "visitor isn't sitting in silence while the action runs."
-            )
+            ),
+            **extra,
         )
         self._room = room
         self._state = room_state
@@ -49,6 +75,9 @@ class DemoGuideAgent(Agent):
 
     @function_tool
     async def click(self, context: RunContext, agent_id: str) -> dict:
+        # A click can land on a real <a href> and cause a full page
+        # navigation just like navigate() does -- record it the same way.
+        self._state["last_agent_action_at"] = time.monotonic()
         return await self._send_command("click", {"agent_id": agent_id})
 
     @function_tool
@@ -57,6 +86,12 @@ class DemoGuideAgent(Agent):
 
     @function_tool
     async def navigate(self, context: RunContext, page: str) -> dict:
+        # Record when we last acted, so the page_state handler can tell
+        # this navigation was caused by us, not the visitor -- the LLM's
+        # own turn (the one making this tool call) will already narrate
+        # the result, so the independent auto-narration should stay quiet.
+        self._state["last_agent_action_at"] = time.monotonic()
+        print(f"[orchestrator] navigate() called, timestamp recorded -- pid={os.getpid()}")
         return await self._send_command("navigate", {"page": page})
 
     async def _send_command(self, action: str, params: dict) -> dict:
@@ -72,7 +107,21 @@ class DemoGuideAgent(Agent):
         )
 
         try:
-            return await asyncio.wait_for(result_future, timeout=COMMAND_TIMEOUT_S)
+            res = await asyncio.wait_for(result_future, timeout=COMMAND_TIMEOUT_S)
+            if isinstance(res, dict) and res.get("navigating"):
+                print(f"[orchestrator] Action '{action}' is navigating. Waiting for new page_state...")
+                nav_future = loop.create_future()
+                PENDING_NAVIGATIONS[self._room.name] = nav_future
+                try:
+                    # Give it a bit more timeout for the page to actually load
+                    page_state_res = await asyncio.wait_for(nav_future, timeout=8.0)
+                    return page_state_res
+                except asyncio.TimeoutError:
+                    print(f"[orchestrator] Warning: timed out waiting for page_state after navigation")
+                    return {"ok": False, "error": "timeout waiting for new page to load"}
+                finally:
+                    PENDING_NAVIGATIONS.pop(self._room.name, None)
+            return res
         except asyncio.TimeoutError:
             return {"ok": False, "error": f"no response from page within {COMMAND_TIMEOUT_S}s"}
         finally:
@@ -82,14 +131,21 @@ class DemoGuideAgent(Agent):
 async def entrypoint(ctx: JobContext):
     await ctx.connect()
     room = ctx.room
+    print(f"[orchestrator] entrypoint started -- pid={os.getpid()} room={room.name}")
     room_state = ROOM_STATE.setdefault(room.name, {"current_page": None, "elements": []})
 
-    agent = DemoGuideAgent(room, room_state)
+    saved_ctx = load_history(room.name)
+    if saved_ctx is not None:
+        print(f"[orchestrator] restored {len(saved_ctx.items)} prior item(s) for room {room.name}")
+
+    agent = DemoGuideAgent(room, room_state, chat_ctx=saved_ctx)
     session = AgentSession(
         stt="deepgram/nova-3",
         llm="openai/gpt-4.1-mini",
         tts="cartesia/sonic-3",
     )
+
+    session.on("conversation_item_added", lambda ev: save_history(room.name, session.history))
 
     session_started = False
 
@@ -108,13 +164,43 @@ async def entrypoint(ctx: JobContext):
         elif msg.get("type") == "page_state":
             room_state["current_page"] = msg.get("page")
             room_state["elements"] = msg.get("elements", [])
+            
+            nav_future = PENDING_NAVIGATIONS.get(room.name)
+            if nav_future and not nav_future.done():
+                nav_future.set_result({
+                    "ok": True,
+                    "page": msg.get("page"),
+                    "elements": msg.get("elements", [])
+                })
+
+            last_action_at = room_state.get("last_agent_action_at")
+            seconds_since_action = (
+                time.monotonic() - last_action_at if last_action_at is not None else None
+            )
+            print(
+                f"[orchestrator] page_state received -- pid={os.getpid()} "
+                f"page={room_state['current_page']} "
+                f"seconds_since_last_agent_action={seconds_since_action}"
+            )
             # Only react to page changes once the session is fully running;
             # early page_state messages arrive before session.start() finishes.
             if not session_started:
                 return
-            # The page changed under us -- either we navigated, or the
-            # visitor clicked around on their own. Either way, let the
-            # agent notice and react instead of staying silent about it.
+            # If the agent acted (click OR navigate) very recently, treat
+            # this page change as caused by that action -- the LLM's own
+            # tool-call turn is already narrating it, so firing the
+            # auto-reply too is exactly what produced the duplicate/
+            # overlapping responses. Only auto-narrate when the visitor
+            # navigated on their own, with no recent agent action.
+            caused_by_agent = (
+                seconds_since_action is not None and seconds_since_action < AGENT_ACTION_WINDOW_S
+            )
+            if caused_by_agent:
+                print("[orchestrator] suppressing auto-narration (agent-initiated nav)")
+                return
+            print("[orchestrator] firing auto-narration (visitor-initiated nav)")
+            # The visitor clicked around on their own -- let the agent
+            # notice and react instead of staying silent about it.
             async def _react_to_page_change(page_name: str):
                 try:
                     await session.generate_reply(
@@ -130,11 +216,17 @@ async def entrypoint(ctx: JobContext):
 
     room.on("data_received", on_data_received)
 
-    await session.start(room=room, agent=agent)
-    session_started = True
-    await session.generate_reply(
-        instructions="Greet the visitor warmly and offer to walk them through the product."
+    await session.start(
+        room=room,
+        agent=agent,
+        room_options=RoomOptions(close_on_disconnect=False),
     )
+    session_started = True
+
+    if saved_ctx is None:
+        await session.generate_reply(
+            instructions="Greet the visitor warmly and offer to walk them through the product."
+        )
 
 
 if __name__ == "__main__":

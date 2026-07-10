@@ -39,7 +39,6 @@ def inject(html_path: Path) -> None:
     target.append(config_tag)
     target.append(chat_ui_tag)
     target.append(runtime_tag)
-
     html_path.write_text(str(soup), encoding="utf-8")
 
 

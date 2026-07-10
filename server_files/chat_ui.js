@@ -60,17 +60,42 @@ window.AgentChatUI = (function () {
     listEl.scrollTop = listEl.scrollHeight;
   }
 
+  function wrapPageContent() {
+    // Move everything currently in <body> into a wrapper div, so the
+    // sidebar can sit next to the page as a real layout sibling instead
+    // of floating on top of it. Only individual properties are set on
+    // body.style (not the whole cssText) so we don't clobber any inline
+    // styles the original page already had.
+    const wrapper = document.createElement("div");
+    wrapper.id = "agent-demo-content-wrapper";
+    wrapper.style.cssText = "flex:1 1 auto;min-width:0";
+    while (document.body.firstChild) {
+      wrapper.appendChild(document.body.firstChild);
+    }
+    document.body.appendChild(wrapper);
+
+    Object.assign(document.body.style, {
+      display: "flex",
+      alignItems: "flex-start",
+      margin: "0",
+      minHeight: "100vh",
+    });
+  }
+
   function buildSidebar() {
+    wrapPageContent();
+
     const panel = document.createElement("div");
     panel.style.cssText = [
-      "position:fixed",
+      "position:sticky",
       "top:0",
-      "right:0",
-      "height:100vh",
+      "align-self:flex-start",
+      "flex:0 0 300px",
       "width:300px",
+      "height:100vh",
       "background:#ffffff",
       "border-left:1px solid #e5e3da",
-      "z-index:2147483000",
+      "z-index:999999",
       "display:flex",
       "flex-direction:column",
       "font-family:sans-serif",
