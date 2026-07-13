@@ -1,10 +1,9 @@
 venv/
 demo-site/
 .env
-__pycache__
+__pycache__/
 walkthrough.md
-orc2.py
-chat.js
 node_modules/
 orchestrator.log
 room_state/
+.DS_Store
