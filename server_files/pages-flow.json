@@ -1,0 +1,120 @@
+{
+    "intro": "Greet the visitor warmly, briefly explain this is a live demo of a hand-painted clothing brand, and let them know you'll walk them through it -- they can ask questions or ask to skip ahead at any point.",
+    "outro": "Ask if there's anything else they'd like to see, and thank them for visiting.",
+    "steps": [
+        {
+            "id": "home",
+            "page": "index.html",
+            "goal": "Introduce the brand and the two main paths a visitor can take",
+            "talking_points": [
+                "This is Classy Colors by Minny -- hand-painted, one-of-a-kind clothing for women who appreciate artistry and individuality",
+                "The hero headline reads 'Wear Your Artistic Soul' -- set the tone that this is wearable art, not mass-produced fashion",
+                "Point out the two main calls to action: View Collection and Custom Orders -- tell the visitor you'll navigate there now",
+                "Briefly mention the featured products teaser section below the hero -- four pieces are shown as a preview",
+                "AGENT NOTE: Do NOT click button-view-collection or button-custom-orders -- use navigate() to go to collections.html or custom-orders.html instead"
+            ],
+            "focus_elements": ["a-view-all-collections"]
+        },
+        {
+            "id": "collections",
+            "page": "collections.html",
+            "goal": "Show off the full product range and filtering capabilities",
+            "talking_points": [
+                "The collections page shows the complete catalog of hand-painted pieces -- currently 8 products across multiple pages",
+                "Highlight two or three featured pieces: Sunset Bloom Dress ($89), Garden Party Blouse ($65), Cosmic Dreams Top ($72)",
+                "Mention the filter sidebar: visitors can browse by category (dresses, tops, cardigans, skirts) and price range using the sort dropdown",
+                "Each item card has an Add to Cart button, but for this demo you can point it out visually rather than clicking it",
+                "Pieces are hand-painted, so each one is genuinely unique -- no two items are exactly alike",
+                "AGENT NOTE: Do NOT click any product card links (a-sunset-bloom-dress etc.) or Add to Cart buttons -- use navigate() to go to the product page instead"
+            ],
+            "focus_elements": [
+                "select-featured-price-low-to-high-pri"
+            ]
+        },
+        {
+            "id": "product",
+            "page": "product_:id.html",
+            "goal": "Walk through a single product detail page to show the purchase experience",
+            "talking_points": [
+                "This is the product detail page -- shown here with the 'Handpainted Floral Maxi Dress' as an example ($149.99, marked down from $199.99)",
+                "Visitors can select a color variant: Burgundy Rose, Blush Pink, Cream Ivory, or Deep Rose -- click one to demonstrate",
+                "Size selection covers XS through XXL -- click a size to show it being selected",
+                "The tabbed section below covers Description, Care Instructions, and Shipping Info -- click through the tabs",
+                "Key trust signals are displayed: Free Shipping on orders over $75, Easy 30-day Returns, Secure Payment",
+                "AGENT NOTE: Do NOT click button-add-to-cart or button-27 (wishlist) -- they have no backend in this demo"
+            ],
+            "focus_elements": [
+                "button-burgundy-rose",
+                "button-blush-pink",
+                "button-cream-ivory",
+                "button-deep-rose",
+                "button-m",
+                "tab-description",
+                "tab-care-instructions",
+                "tab-shipping-info",
+                "a-back-to-collections"
+            ]
+        },
+        {
+            "id": "custom_orders",
+            "page": "custom-orders.html",
+            "goal": "Explain how a visitor would commission a custom hand-painted piece",
+            "talking_points": [
+                "Custom Orders lets visitors commission something completely unique -- a quote, color, character, or vibe painted onto their chosen garment",
+                "Walk through the form fields: Full Name, Email or WhatsApp, Garment Type (T-shirt, Denim Jacket, Tote Bag, Shirt, Hoodie, Other), Size, Color Preference, and a Vision description",
+                "Visitors can upload up to 3 reference images and optionally provide a budget range",
+                "After submission, Minny reaches out within 24-48 hours to finalize design, timeline, and price -- photos are sent for approval before shipping",
+                "The 'Past Custom Orders' gallery at the bottom shows real examples: Floral Dream Tee, Sunset Denim, Quote Canvas Bag, Cat Portrait Hoodie",
+                "Offer to fill in an example request live if they'd like to see it in action -- type into the fields, but do NOT click the submit button",
+                "AGENT NOTE: Do NOT click button-submit-my-custom-order-request -- the form has no backend in this demo"
+            ],
+            "focus_elements": [
+                "input-7",
+                "input-e-g-pastel-pink-deep-burgundy-",
+                "select-select-a-garment-type-t-shirt-",
+                "select-select-size-xs-s-m-l-xl-xxl-i-",
+                "textarea-tell-me-about-your-vision-what",
+                "input-e-g-2000-3000"
+            ]
+        },
+        {
+            "id": "about",
+            "page": "about.html",
+            "goal": "Give a short sense of the brand's story and values",
+            "talking_points": [
+                "The About page tells the story of a passionate artist who believed every woman deserves something as unique as she is",
+                "Four brand pillars are featured: Hand-Painted Artistry, Made with Love, Custom Crafted, and Premium Quality",
+                "A photo carousel (4 slides) shows behind-the-scenes and artistic imagery -- click through the slide buttons to demonstrate",
+                "The bottom of the page has a 'Get In Touch' contact form -- point it out but do NOT click Send Message",
+                "Keep this section brief -- one or two sentences on origin, then move on",
+                "AGENT NOTE: Do NOT click button-send-message or the Instagram links (a-see-more, a-12) -- they either have no backend or open an external tab"
+            ],
+            "focus_elements": [
+                "button-go-to-slide-1",
+                "button-go-to-slide-2",
+                "button-go-to-slide-3",
+                "button-go-to-slide-4"
+            ]
+        },
+        {
+            "id": "contact",
+            "page": "contact.html",
+            "goal": "Show how visitors can reach out or start a conversation with the brand",
+            "talking_points": [
+                "The Contact page provides multiple ways to connect: Email (hello@classycolorshandpainted.com), Instagram DM (@classy_colours_handpainted_hue), and a direct message form",
+                "The form collects First Name, Last Name, Email, a Subject (General Inquiry, Shipping Question, Collaboration Opportunity), and a Message",
+                "At the bottom there is a call-to-action nudging visitors toward Custom Orders if they're looking for something unique",
+                "This is the best page to land on if a visitor has a specific question before purchasing",
+                "AGENT NOTE: Do NOT click button-send-message or a-7 (Instagram link) -- they have no backend or open an external tab. Use a-explore-custom-orders if you want to navigate to custom orders"
+            ],
+            "focus_elements": [
+                "input-your-first-name",
+                "input-your-last-name",
+                "input-your-email-example-com",
+                "select-general-inquiry-shipping-quest",
+                "textarea-tell-us-about-your-vision-or-a",
+                "a-explore-custom-orders"
+            ]
+        }
+    ]
+}

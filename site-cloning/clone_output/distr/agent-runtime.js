@@ -34,18 +34,30 @@
   function collectElements() {
     return Array.from(document.querySelectorAll("[data-agent-id]"))
       .filter((el) => el.offsetParent !== null) // roughly: currently visible
-      .map((el) => ({
-        agent_id: el.getAttribute("data-agent-id"),
-        role: el.getAttribute("role") || el.tagName.toLowerCase(),
-        text: (
-          el.innerText ||
-          el.getAttribute("aria-label") ||
-          el.getAttribute("placeholder") ||
-          ""
-        )
-          .trim()
-          .slice(0, 60),
-      }));
+      .map((el) => {
+        const rect = el.getBoundingClientRect();
+        const windowHeight = (window.innerHeight || document.documentElement.clientHeight);
+        const windowWidth = (window.innerWidth || document.documentElement.clientWidth);
+        const inViewport = (
+          rect.bottom > 0 &&
+          rect.right > 0 &&
+          rect.top < windowHeight &&
+          rect.left < windowWidth
+        );
+        return {
+          agent_id: el.getAttribute("data-agent-id"),
+          role: el.getAttribute("role") || el.tagName.toLowerCase(),
+          text: (
+            el.innerText ||
+            el.getAttribute("aria-label") ||
+            el.getAttribute("placeholder") ||
+            ""
+          )
+            .trim()
+            .slice(0, 60),
+          in_viewport: inViewport,
+        };
+      });
   }
 
   let cursorEl = null;
@@ -161,6 +173,21 @@
         case "navigate":
           window.location.href = cmd.page;
           return { ok: true, navigating: true };
+
+        case "scroll": {
+          let scrollAmount = window.innerHeight * 0.6; // Scroll 60% of viewport
+          if (cmd.direction === "up") {
+            window.scrollBy({ top: -scrollAmount, behavior: "smooth" });
+          } else {
+            window.scrollBy({ top: scrollAmount, behavior: "smooth" });
+          }
+          await new Promise((resolve) => setTimeout(resolve, 600));
+          return {
+            ok: true,
+            page: currentPageFilename(),
+            elements: collectElements(),
+          };
+        }
 
         default:
           return { ok: false, error: `unknown action "${cmd.action}"` };

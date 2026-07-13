@@ -7,3 +7,4 @@ orc2.py
 chat.js
 node_modules/
 orchestrator.log
+room_state/
